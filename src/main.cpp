@@ -101,6 +101,49 @@ int main() {
           double steer_value;
           double throttle_value;
 
+          // convert map points to vehicle points
+          vector<double> car_x_pts;
+          vector<double> car_y_pts;
+          //aj - need to clarify this
+          psi = -psi;
+          for(int i=0; i < ptsx.size(); i++)
+          {
+            double trans_x = ptsx[i] - px;
+            double trans_y = ptsy[i] - py;
+            double car_x = cos(psi)*trans_x - sin(psi)*trans_y;
+            car_x_pts.push_back(car_x);
+            double car_y = sin(psi)*trans_x + cos(psi)*trans_y;
+            car_y_pts.push_back(car_y);
+          }
+          double car_px = cos(psi)*px - sin(psi)*py;
+          double car_py = sin(psi)*px + cos(psi)*py;
+
+          // TODO: fit a polynomial to the above x and y coordinates
+          Eigen::VectorXd xvals = Eigen::VectorXd::Map(car_x_pts.data(), car_x_pts.size());
+
+
+          Eigen::VectorXd yvals = Eigen::VectorXd::Map(car_y_pts.data(), car_y_pts.size());
+
+
+          auto coeffs = polyfit(xvals, yvals, 3);//?
+
+          // TODO: calculate the cross track error
+		  double cte = polyeval(coeffs, 0);//car_px) - car_py;
+		  // TODO: calculate the orientation error
+		  double epsi = psi - atan(coeffs[1]);
+
+          Eigen::VectorXd state(6);
+          state << 0.0, 0.0, 0.0, v, cte, epsi;//car_px, car_py, psi, v, cte, epsi;
+
+          auto res = mpc.Solve(state, coeffs);
+          steer_value = -res[0];
+          //steer_value /= deg2rad(25);
+          //steer_value = (steer_value < -1.0) ? -1.0: steer_value;
+          //steer_value = (steer_value > 1.0) ? 1.0: steer_value;
+          throttle_value = res[1];
+          //throttle_value = (throttle_value < -1.0) ? -1.0: throttle_value;
+          //throttle_value = (throttle_value > 1.0) ? 1.0: throttle_value;
+          
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
           // Otherwise the values will be in between [-deg2rad(25), deg2rad(25] instead of [-1, 1].
@@ -113,17 +156,38 @@ int main() {
 
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Green line
+          for(int i=2; i<res.size(); i++)
+          {
+              if((i % 2) == 0)
+              {
+	            mpc_x_vals.push_back(res[i]);
+              }
+              else
+              {
+	            mpc_y_vals.push_back(res[i]);
+              }
+          }
 
           msgJson["mpc_x"] = mpc_x_vals;
           msgJson["mpc_y"] = mpc_y_vals;
 
           //Display the waypoints/reference line
-          vector<double> next_x_vals;
-          vector<double> next_y_vals;
+          vector<double> next_x_vals;// = car_x_pts;
+          vector<double> next_y_vals;// = car_x_pts;
 
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Yellow line
+          double inc = 2.0;
+          double next_x = 0.0;
+          double next_y = 0.0;
+          for(int i=0; i < 10;i++)
+          {
+            next_x += inc;
+            next_y = polyeval(coeffs, next_x);
+            next_x_vals.push_back(next_x);
+            next_y_vals.push_back(next_y);
 
+          }
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
 
