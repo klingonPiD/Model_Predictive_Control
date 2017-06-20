@@ -9,6 +9,8 @@
 #include "MPC.h"
 #include "json.hpp"
 
+const double Lf = 2.67;
+
 // for convenience
 using json = nlohmann::json;
 
@@ -91,6 +93,8 @@ int main() {
           double py = j[1]["y"];
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
+          double delta = j[1]["steering_angle"];
+          double acc = j[1]["throttle"];
 
           /*
           * TODO: Calculate steering angle and throttle using MPC.
@@ -132,12 +136,12 @@ int main() {
 		  // TODO: calculate the orientation error
 		  double epsi = psi - atan(coeffs[1]);
 
-          Eigen::VectorXd state(6);
-          state << 0.0, 0.0, 0.0, v, cte, epsi;//car_px, car_py, psi, v, cte, epsi;
+          Eigen::VectorXd state(8);
+          state << 0.0, 0.0, 0.0, v, cte, epsi, delta, acc;//car_px, car_py, psi, v, cte, epsi;
 
           auto res = mpc.Solve(state, coeffs);
           steer_value = -res[0];
-          //steer_value /= deg2rad(25);
+          steer_value /= (deg2rad(25) * Lf);
           //steer_value = (steer_value < -1.0) ? -1.0: steer_value;
           //steer_value = (steer_value > 1.0) ? 1.0: steer_value;
           throttle_value = res[1];
@@ -193,7 +197,8 @@ int main() {
 
 
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
-          std::cout << msg << std::endl;
+          //std::cout << msg << std::endl;
+          std::cout << rad2deg(steer_value) << std::endl;
           // Latency
           // The purpose is to mimic real driving conditions where
           // the car does actuate the commands instantly.

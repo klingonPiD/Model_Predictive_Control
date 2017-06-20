@@ -23,7 +23,7 @@ const double Lf = 2.67;
 
 // NOTE: feel free to play around with this
 // or do something completely different
-double ref_v = 40;
+double ref_v = 100; //40;
 
 // The solver takes all the state variables and actuator
 // variables in a singular vector. Thus, we should to establish
@@ -49,27 +49,27 @@ class FG_eval {
     // `fg` a vector of the cost constraints, `vars` is a vector of variable values (state & actuators)
     // NOTE: You'll probably go back and forth between this function and
     // the Solver function below.
-    fg[0] = 0;
+    fg[0] = 0.0;
 
     // Reference State Cost
     // TODO: Define the cost related the reference state and
     // any anything you think may be beneficial.
     for (int t = 0; t < N; t++) {
-      fg[0] += 500.0 * CppAD::pow(vars[cte_start + t], 2);
-      fg[0] += 200.0*CppAD::pow(vars[epsi_start + t], 2);
+      fg[0] += 2000.0 * CppAD::pow(vars[cte_start + t], 2);
+      fg[0] += 2000.0*CppAD::pow(vars[epsi_start + t], 2);
       fg[0] += CppAD::pow(vars[v_start + t] - ref_v, 2);
     }
 
     // Minimize the use of actuators.
     for (int t = 0; t < N - 1; t++) {
-      fg[0] += 100.0*CppAD::pow(vars[delta_start + t], 2);
+      fg[0] += 10.0*CppAD::pow(vars[delta_start + t], 2);
       fg[0] += CppAD::pow(vars[a_start + t], 2);
     }
 
     // Minimize the value gap between sequential actuations.
     for (int t = 0; t < N - 2; t++) {
-      fg[0] += 1000.0 * CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);
-      fg[0] += 300.0 * CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
+      fg[0] += 200.0 * CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);
+      fg[0] += 10.0 * CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
     }
 
     //
@@ -145,13 +145,26 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   size_t i;
   typedef CPPAD_TESTVECTOR(double) Dvector;
 
-  //todo: aj
+  //Set the state 
   double x = state[0];
   double y = state[1];
   double psi = state[2];
   double v = state[3];
   double cte = state[4];
   double epsi = state[5];
+  double delta = state[6];
+  double acc = state[7];
+
+  //Account for latency - 100 ms
+  double l_dt = 0.1;
+  x += v * cos(psi) * l_dt;
+  y += v * sin(psi) * l_dt;
+  psi += (v/Lf) * -delta * l_dt;
+  v += acc * l_dt;
+  cte += v * sin(epsi) * l_dt;
+  epsi += v * (-delta / Lf) * l_dt;
+
+
 
   // TODO: Set the number of model variables (includes both states and inputs).
   // For example: If the state is a 4 element vector, the actuators is a 2
@@ -202,8 +215,8 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   // degrees (values in radians).
   // NOTE: Feel free to change this to something else.
   for (int i = delta_start; i < a_start; i++) {
-    vars_lowerbound[i] = -0.436332;
-    vars_upperbound[i] = 0.436332;
+    vars_lowerbound[i] = -0.436332 * Lf;
+    vars_upperbound[i] = 0.436332 * Lf;
   }
 
   // Acceleration/decceleration upper and lower limits.
