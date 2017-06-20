@@ -5,9 +5,9 @@
 
 using CppAD::AD;
 
-// TODO: Set the timestep length and duration
+// Set the timestep length and duration
 size_t N = 10;
-double dt = 0.1;//0.2
+double dt = 0.1;
 
 // This value assumes the model presented in the classroom is used.
 //
@@ -23,7 +23,7 @@ const double Lf = 2.67;
 
 // NOTE: feel free to play around with this
 // or do something completely different
-double ref_v = 100; //40;
+double ref_v = 65.0; //40;
 
 // The solver takes all the state variables and actuator
 // variables in a singular vector. Thus, we should to establish
@@ -52,7 +52,7 @@ class FG_eval {
     fg[0] = 0.0;
 
     // Reference State Cost
-    // TODO: Define the cost related the reference state and
+    // Define the cost related the reference state and
     // any anything you think may be beneficial.
     for (int t = 0; t < N; t++) {
       fg[0] += 2000.0 * CppAD::pow(vars[cte_start + t], 2);
@@ -68,7 +68,7 @@ class FG_eval {
 
     // Minimize the value gap between sequential actuations.
     for (int t = 0; t < N - 2; t++) {
-      fg[0] += 200.0 * CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);
+      fg[0] += 500.0 * CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);
       fg[0] += 10.0 * CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
     }
 
@@ -112,14 +112,12 @@ class FG_eval {
       AD<double> psides0 = CppAD::atan(3*coeffs[3]*x0*x0 + 2*coeffs[2]*x0 +coeffs[1]);
 
 
-      // Here's `x` to get you started.
-      // The idea here is to constraint this value to be 0.
+      // The idea here is to constraint these values to be 0.
       //
       // NOTE: The use of `AD<double>` and use of `CppAD`!
       // This is also CppAD can compute derivatives and pass
       // these to the solver.
 
-      // TODO: Setup the rest of the model constraints
       fg[1 + x_start + t] = x1 - (x0 + v0 * CppAD::cos(psi0) * dt);
       fg[1 + y_start + t] = y1 - (y0 + v0 * CppAD::sin(psi0) * dt);
       fg[1 + psi_start + t] = psi1 - (psi0 + (v0/Lf) * delta0 * dt);
@@ -166,13 +164,13 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
 
 
 
-  // TODO: Set the number of model variables (includes both states and inputs).
+  // Set the number of model variables (includes both states and inputs).
   // For example: If the state is a 4 element vector, the actuators is a 2
   // element vector and there are 10 timesteps. The number of variables is:
   //
   // 4 * 10 + 2 * 9
   size_t n_vars = N * 6 + (N - 1) * 2;
-  // TODO: Set the number of constraints
+  // Set the number of constraints
   size_t n_constraints = N * 6;
 
   // Initial value of the independent variables.
@@ -181,7 +179,7 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   for (int i = 0; i < n_vars; i++) {
     vars[i] = 0;
   }
-  //todo: aj
+
   // Set the initial variable values
   vars[x_start] = x;
   vars[y_start] = y;
@@ -192,8 +190,8 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
 
   Dvector vars_lowerbound(n_vars);
   Dvector vars_upperbound(n_vars);
-  // TODO: Set lower and upper limits for variables.
 
+  // Set lower and upper limits for variables.
   // Lower and upper limits for the constraints
   // Should be 0 besides initial state.
   Dvector constraints_lowerbound(n_constraints);
@@ -203,7 +201,6 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
     constraints_upperbound[i] = 0;
   }
 
-  //todo: aj
   // Set all non-actuators upper and lowerlimits
   // to the max negative and positive values.
   for (int i = 0; i < delta_start; i++) {
@@ -212,8 +209,8 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   }
 
   // The upper and lower limits of delta are set to -25 and 25
-  // degrees (values in radians).
-  // NOTE: Feel free to change this to something else.
+  // degrees (values in radians). This is the min/max steering
+  // angle in the simulator.
   for (int i = delta_start; i < a_start; i++) {
     vars_lowerbound[i] = -0.436332 * Lf;
     vars_upperbound[i] = 0.436332 * Lf;
@@ -278,9 +275,7 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   auto cost = solution.obj_value;
   std::cout << "Cost " << cost << std::endl;
 
-  // TODO: Return the first actuator values. The variables can be accessed with
-  // `solution.x[i]`.
-  //
+
   // {...} is shorthand for creating a vector, so auto x1 = {1.0,2.0}
   // creates a 2 element double vector.
   vector<double> res =  {solution.x[delta_start],   solution.x[a_start]};

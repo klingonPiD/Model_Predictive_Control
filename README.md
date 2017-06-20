@@ -1,115 +1,71 @@
-# CarND-Controls-MPC
-Self-Driving Car Engineer Nanodegree Program
+# Term2 - Project 5: Model Predictive Control
+### Ajay Paidi
 
----
+# Objective
+The objective of this project is to implement a Model Predictive Controller (MPC) to control the movement of a virtual car in the Udacity simulator.
 
-## Dependencies
+# File structure
+- **ReadMe.md**: This file
+- **main.cpp**: The main executable program that calls the MPC to get a steering value and throttle value and communicates with the virtual car in the simulator using uwebsockets.
+- **MPC.h** and **MPC.cpp**: Contains the implementation of the Model Predictive Controller.
 
-* cmake >= 3.5
- * All OSes: [click here for installation instructions](https://cmake.org/install/)
-* make >= 4.1
-  * Linux: make is installed by default on most Linux distros
-  * Mac: [install Xcode command line tools to get make](https://developer.apple.com/xcode/features/)
-  * Windows: [Click here for installation instructions](http://gnuwin32.sourceforge.net/packages/make.htm)
-* gcc/g++ >= 5.4
-  * Linux: gcc / g++ is installed by default on most Linux distros
-  * Mac: same deal as make - [install Xcode command line tools]((https://developer.apple.com/xcode/features/)
-  * Windows: recommend using [MinGW](http://www.mingw.org/)
-* [uWebSockets](https://github.com/uWebSockets/uWebSockets)
-  * Run either `install-mac.sh` or `install-ubuntu.sh`.
-  * If you install from source, checkout to commit `e94b6e1`, i.e.
-    ```
-    git clone https://github.com/uWebSockets/uWebSockets 
-    cd uWebSockets
-    git checkout e94b6e1
-    ```
-    Some function signatures have changed in v0.14.x. See [this PR](https://github.com/udacity/CarND-MPC-Project/pull/3) for more details.
-* Fortran Compiler
-  * Mac: `brew install gcc` (might not be required)
-  * Linux: `sudo apt-get install gfortran`. Additionall you have also have to install gcc and g++, `sudo apt-get install gcc g++`. Look in [this Dockerfile](https://github.com/udacity/CarND-MPC-Quizzes/blob/master/Dockerfile) for more info.
-* [Ipopt](https://projects.coin-or.org/Ipopt)
-  * Mac: `brew install ipopt`
-  * Linux
-    * You will need a version of Ipopt 3.12.1 or higher. The version available through `apt-get` is 3.11.x. If you can get that version to work great but if not there's a script `install_ipopt.sh` that will install Ipopt. You just need to download the source from the Ipopt [releases page](https://www.coin-or.org/download/source/Ipopt/) or the [Github releases](https://github.com/coin-or/Ipopt/releases) page.
-    * Then call `install_ipopt.sh` with the source directory as the first argument, ex: `bash install_ipopt.sh Ipopt-3.12.1`. 
-  * Windows: TODO. If you can use the Linux subsystem and follow the Linux instructions.
-* [CppAD](https://www.coin-or.org/CppAD/)
-  * Mac: `brew install cppad`
-  * Linux `sudo apt-get install cppad` or equivalent.
-  * Windows: TODO. If you can use the Linux subsystem and follow the Linux instructions.
-* [Eigen](http://eigen.tuxfamily.org/index.php?title=Main_Page). This is already part of the repo so you shouldn't have to worry about it.
-* Simulator. You can download these from the [releases tab](https://github.com/udacity/self-driving-car-sim/releases).
-* Not a dependency but read the [DATA.md](./DATA.md) for a description of the data sent back from the simulator.
+# Description
 
+The following are the ingredients that help to realize a successful MPC
+1. Vehicle model.
+2. Cost function.
+3. Solver.
 
-## Basic Build Instructions
+### Vehicle Model
+In this implementation of MPC a simple kinematic model is assumed to approximate the vehicle dynamics. The state of this model is as follows
+[x_position, y_position, orientation, velocity, cross track error, orientation error].
+The cross track error (CTE) is the distance between the predicted vehicle position and the reference (planned) trajectory. Similarly the orientation error is the difference between the predicted orientation of the vehicle and the planned orientation.
+The actuators used to control the state are [steering angle, acceleration].
+The acceleration actuator controls both the throttle (max throttle +1) and brake (max brake -1).
+The update equations governing the change of state over time is as follows
+![Update equations](Vehicle_model_update.png)
 
+#### Polynomial fit
+The path planning module typically returns 'waypoints' of the planned path ahead. In order to use this information in the solver to compute the predicted path, one needs to fit a polynomial to the waypoints. The polynomial coefficients can then be used to compute the error update equations for CTE and orientation error.
+The error update  equations are
+![CTE error update equations](cte_update.png)
 
-1. Clone this repo.
-2. Make a build directory: `mkdir build && cd build`
-3. Compile: `cmake .. && make`
-4. Run it: `./mpc`.
+The polynomial co-efficients are used to compute f(xt).
 
-## Tips
+![Orientation error update equations](epsi_update.png)
 
-1. It's recommended to test the MPC on basic examples to see if your implementation behaves as desired. One possible example
-is the vehicle starting offset of a straight line (reference). If the MPC implementation is correct, after some number of timesteps
-(not too many) it should find and track the reference line.
-2. The `lake_track_waypoints.csv` file has the waypoints of the lake track. You could use this to fit polynomials and points and see of how well your model tracks curve. NOTE: This file might be not completely in sync with the simulator so your solution should NOT depend on it.
-3. For visualization this C++ [matplotlib wrapper](https://github.com/lava/matplotlib-cpp) could be helpful.
+psi_dest can be obtained by computing the arctan(derivative of f(xt)).
 
-## Editor Settings
+### Cost function
+The MPC arrives at the desired actuator values by minimizing a cost function between the desired/planned trajectory and predicted trajectory (using the update equations for the vehicle model). I used the following cost function in my implementation
+cost = A * cte^2 +  B * epsi^2 + C * (v - ref_v)^2 + D * delta^2 + E * acc^2 + F * (delta_t1 - delta_t0)^2 + G * (acc_t1 - acc_t0)^2
+Here A,B,C,D,E,F,G are weights used to tune the desired strength of the corresponding term.
+CTE - Cross track error
+epsi - Orientation error
+v and ref_v - velocity and reference velocity
+delta - Steering angle
+acc - acceleration
 
-We've purposefully kept editor configuration files out of this repo in order to
-keep it as simple and environment agnostic as possible. However, we recommend
-using the following settings:
+### Solver
+The solver or the optimizer is the key ingredient of the MPC that optimizes the actuator inputs and outputs a vector of actuator values that minimizes the cost function for every time step t. The length of the output vector is the same as the number of samples in the prediction time horizon T = N * dt. N is the number of time samples and dt is the interval between time samples. N and dt are hyperparameters that need to be tuned. I used a prediction horizon of 1 second (N=10 and dt=0.1).
+The solver used in this implementation is an open source solver called Ipopt. An important step in using Ipopt is setting the appropriate variable bounds and model constraints. The variable bounds are the upper and lower bounds for each of the variables in the vehicle state vector and actuator inputs. The model constraints are set up to minimize the difference between the predicted state values and computed state values. In a sense they can be thought of as add-ons on top of the cost function. So for example, if x_t1 is the computed x state of the solver after minimizing the cost function, then the model constraint to be minimized is x_t1 - x_t1_predicted. x_t1_predicted can be calculated from the vehicle model update equations.
 
-* indent using spaces
-* set tab width to 2 spaces (keeps the matrices in source code aligned)
+## MPC algorithm
+Here is the MPC algorithm:
+Setup:
+- Define the length of the trajectory, N, and duration of each timestep, dt.
+- Define vehicle dynamics and actuator limitations along with other constraints.
+- Define the cost function.
 
-## Code Style
+Loop:
+- We pass the current state as the initial state to the model predictive controller.
+- We call the optimization solver. Given the initial state, the solver will return the vector of control inputs that minimizes the cost function.
+- We apply the first control input to the vehicle.
+- Back to 1.
 
-Please (do your best to) stick to [Google's C++ style guide](https://google.github.io/styleguide/cppguide.html).
+## Latency
+One big advantage of MPC (over say PID controller) is its ability to model in latency. Latency refers to the delay between sending an actuator signal and applying the actuator signal. The Udacity simulator simulates a latency of 100 ms. Latency is handled by modeling the delay into the input state. If the simulator gives the current state of the vehicle at time t, one can apply the vehicle model update equations to estimate the state at time t+l_dt where l_dt is the latency time. The MPC solver then computes the optimized actuator values at time t+l_dt (instead of time t).
 
-## Project Instructions and Rubric
+# Results
 
-Note: regardless of the changes you make, your project must be buildable using
-cmake and make!
-
-More information is only accessible by people who are already enrolled in Term 2
-of CarND. If you are enrolled, see [the project page](https://classroom.udacity.com/nanodegrees/nd013/parts/40f38239-66b6-46ec-ae68-03afd8a601c8/modules/f1820894-8322-4bb3-81aa-b26b3c6dcbaf/lessons/b1ff3be0-c904-438e-aad3-2b5379f0e0c3/concepts/1a2255a0-e23c-44cf-8d41-39b8a3c8264a)
-for instructions and the project rubric.
-
-## Hints!
-
-* You don't have to follow this directory structure, but if you do, your work
-  will span all of the .cpp files here. Keep an eye out for TODOs.
-
-## Call for IDE Profiles Pull Requests
-
-Help your fellow students!
-
-We decided to create Makefiles with cmake to keep this project as platform
-agnostic as possible. Similarly, we omitted IDE profiles in order to we ensure
-that students don't feel pressured to use one IDE or another.
-
-However! I'd love to help people get up and running with their IDEs of choice.
-If you've created a profile for an IDE that you think other students would
-appreciate, we'd love to have you add the requisite profile files and
-instructions to ide_profiles/. For example if you wanted to add a VS Code
-profile, you'd add:
-
-* /ide_profiles/vscode/.vscode
-* /ide_profiles/vscode/README.md
-
-The README should explain what the profile does, how to take advantage of it,
-and how to install it.
-
-Frankly, I've never been involved in a project with multiple IDE profiles
-before. I believe the best way to handle this would be to keep them out of the
-repo root to avoid clutter. My expectation is that most profiles will include
-instructions to copy files to a new location to get picked up by the IDE, but
-that's just a guess.
-
-One last note here: regardless of the IDE used, every submitted project must
-still be compilable with cmake and make./
+[![MPC](https://img.youtube.com/vi/cK4fkN1y0kE/0.jpg)](https://youtu.be/cK4fkN1y0kE)

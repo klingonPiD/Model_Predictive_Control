@@ -79,7 +79,7 @@ int main() {
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
     string sdata = string(data).substr(0, length);
-    cout << sdata << endl;
+    //cout << sdata << endl;
     if (sdata.size() > 2 && sdata[0] == '4' && sdata[1] == '2') {
       string s = hasData(sdata);
       if (s != "") {
@@ -97,7 +97,7 @@ int main() {
           double acc = j[1]["throttle"];
 
           /*
-          * TODO: Calculate steering angle and throttle using MPC.
+          * Calculate steering angle and throttle using MPC.
           *
           * Both are in between [-1, 1].
           *
@@ -108,49 +108,50 @@ int main() {
           // convert map points to vehicle points
           vector<double> car_x_pts;
           vector<double> car_y_pts;
-          //aj - need to clarify this
+          // Note: This is super critical
+          // A +ve steering angle in the simulator implies a -ve angle in the
+          // vehicle model and vice versa
           psi = -psi;
           for(int i=0; i < ptsx.size(); i++)
           {
+            // Note: Subtracting px and py from the way points has the effect
+            // of centering the vehicle at origin. Makes the math easier.
             double trans_x = ptsx[i] - px;
             double trans_y = ptsy[i] - py;
+            // Applying rotation transform [cos(theta) -sin(theta); sin(theta) cos(theta)]
+            // Translation not required since vehicle is now centered at origin
             double car_x = cos(psi)*trans_x - sin(psi)*trans_y;
             car_x_pts.push_back(car_x);
             double car_y = sin(psi)*trans_x + cos(psi)*trans_y;
             car_y_pts.push_back(car_y);
           }
-          double car_px = cos(psi)*px - sin(psi)*py;
-          double car_py = sin(psi)*px + cos(psi)*py;
 
-          // TODO: fit a polynomial to the above x and y coordinates
+          // Convert std::vector to Eigen vector for polyfit
           Eigen::VectorXd xvals = Eigen::VectorXd::Map(car_x_pts.data(), car_x_pts.size());
-
-
           Eigen::VectorXd yvals = Eigen::VectorXd::Map(car_y_pts.data(), car_y_pts.size());
 
+          //Fitting a 3rd degree polynomial
+          auto coeffs = polyfit(xvals, yvals, 3);
 
-          auto coeffs = polyfit(xvals, yvals, 3);//?
-
-          // TODO: calculate the cross track error
-		  double cte = polyeval(coeffs, 0);//car_px) - car_py;
-		  // TODO: calculate the orientation error
+          // Calculate the cross track error
+		  double cte = polyeval(coeffs, 0);
+		  // Calculate the orientation error
 		  double epsi = psi - atan(coeffs[1]);
 
           Eigen::VectorXd state(8);
-          state << 0.0, 0.0, 0.0, v, cte, epsi, delta, acc;//car_px, car_py, psi, v, cte, epsi;
+          // Initial x, y and psi are zero because transformations have been applied above
+          // to center the vehicle at orign and psi has been set to -psi.
+          state << 0.0, 0.0, 0.0, v, cte, epsi, delta, acc;
 
           auto res = mpc.Solve(state, coeffs);
           steer_value = -res[0];
+          // Divide by deg2rad(25) since the returned values need to be between [-1,1]
+          // Also divide by Lf since we apply this multiplication factor to the psi calculation
+          // inside the solver 
           steer_value /= (deg2rad(25) * Lf);
-          //steer_value = (steer_value < -1.0) ? -1.0: steer_value;
-          //steer_value = (steer_value > 1.0) ? 1.0: steer_value;
           throttle_value = res[1];
-          //throttle_value = (throttle_value < -1.0) ? -1.0: throttle_value;
-          //throttle_value = (throttle_value > 1.0) ? 1.0: throttle_value;
           
           json msgJson;
-          // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
-          // Otherwise the values will be in between [-deg2rad(25), deg2rad(25] instead of [-1, 1].
           msgJson["steering_angle"] = steer_value;
           msgJson["throttle"] = throttle_value;
 
@@ -176,8 +177,8 @@ int main() {
           msgJson["mpc_y"] = mpc_y_vals;
 
           //Display the waypoints/reference line
-          vector<double> next_x_vals;// = car_x_pts;
-          vector<double> next_y_vals;// = car_x_pts;
+          vector<double> next_x_vals;
+          vector<double> next_y_vals;
 
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Yellow line
@@ -198,7 +199,9 @@ int main() {
 
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
           //std::cout << msg << std::endl;
-          std::cout << rad2deg(steer_value) << std::endl;
+          std::cout << "Steering angle: " << msgJson["steering_angle"] << std::endl;
+          std::cout << "Throttle: " << msgJson["throttle"] << std::endl;
+          //std::cout << rad2deg(steer_value) << std::endl;
           // Latency
           // The purpose is to mimic real driving conditions where
           // the car does actuate the commands instantly.
